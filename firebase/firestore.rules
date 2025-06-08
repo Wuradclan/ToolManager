@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      // Only the user or an admin can read
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      // Only the user can update their profile (cannot change their role), or an admin
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && !changingRole()) || isAdmin()
+      );
+
+      // A user can only create their own document
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      // Only admin can delete users
+      allow delete: if isAdmin();
+    }
+
+    // TOOLS COLLECTION
+    match /tools/{toolId} {
+      allow read: if isSignedIn();
+
+      allow create, update, delete: if isSignedIn() && isManagerOrAdmin();
+    }
+
+    // TRANSACTIONS COLLECTION
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && request.resource.data.fromUserId == request.auth.uid;
+
+      // Only borrower or owner can update transaction (e.g., confirm handoff)
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.fromUserId ||
+        request.auth.uid == resource.data.toUserId ||
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // 🔧 Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return request.auth.token.role == 'admin';
+    }
+
+    function isManagerOrAdmin() {
+      return request.auth.token.role in ['admin', 'manager'];
+    }
+
+    function changingRole() {
+      return request.resource.data.role != resource.data.role;
+    }
+  }
+}
