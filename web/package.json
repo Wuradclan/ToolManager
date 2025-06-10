@@ -15,7 +15,9 @@
   "dependencies": {
     "firebase": "^11.9.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-qr-code": "^2.0.15",
+    "react-router-dom": "^7.6.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.8",
