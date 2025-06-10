@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { View, TextInput, Button, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../src/services/firebaseConfig';
-import { useRouter } from 'expo-router';
 
-export default function LoginScreen() {
-  const router = useRouter();
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,10 +12,10 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert('Login Success');
-      router.replace('/'); // go to home screen
+      Alert.alert('Login successful');
+      // Navigate to dashboard/home if needed
     } catch (error) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert('Login failed', error.message);
     } finally {
       setLoading(false);
     }
@@ -25,20 +23,19 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign In</Text>
+      <Text style={styles.title}>Login</Text>
       <TextInput
         placeholder="Email"
         value={email}
-        autoCapitalize="none"
-        keyboardType="email-address"
         onChangeText={setEmail}
         style={styles.input}
+        autoCapitalize="none"
       />
       <TextInput
         placeholder="Password"
         value={password}
-        secureTextEntry
         onChangeText={setPassword}
+        secureTextEntry
         style={styles.input}
       />
       <Button title={loading ? 'Logging in...' : 'Login'} onPress={handleLogin} disabled={loading} />
@@ -47,7 +44,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 24, textAlign: 'center' },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 12, marginBottom: 16, borderRadius: 8 }
+  container: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#fff' },
+  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 24 },
+  input: { borderWidth: 1, borderColor: '#ccc', padding: 12, marginBottom: 16, borderRadius: 8 },
 });

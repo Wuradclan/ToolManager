@@ -1,18 +1,32 @@
 // src/services/firebaseConfig.js
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import Constants from 'expo-constants';
+import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import {
+  initializeAuth,
+  getReactNativePersistence,
+} from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBnYFbiH-3z4vf6UtGebadkwYN-nR7AvXI",
-  authDomain: "handoff-tools.firebaseapp.com",
-  projectId: "handoff-tools",
-  storageBucket: "handoff-tools.firebasestorage.app",
-  messagingSenderId: "299439184881",
-  appId: "1:299439184881:web:3363dd741fb0dc70d04250"
+ apiKey: Constants.expoConfig.extra.firebaseApiKey,
+  authDomain: Constants.expoConfig.extra.firebaseAuthDomain,
+  projectId: Constants.expoConfig.extra.firebaseProjectId,
+  storageBucket: Constants.expoConfig.extra.firebaseStorageBucket,
+  messagingSenderId: Constants.expoConfig.extra.firebaseMessagingSenderId,
+  appId: Constants.expoConfig.extra.firebaseAppId,
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Use 
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
+console.log('Firebase and Auth initialized!');
+
+const db = getFirestore(app);
+
+export { auth, db };
