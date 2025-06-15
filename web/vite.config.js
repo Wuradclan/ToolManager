@@ -14,4 +14,7 @@ export default defineConfig(async () => ({
     tailwindcss(),
   ],
   base: "/",
+  build: {
+    outDir: "dist"
+  }
   }))
