@@ -2,7 +2,7 @@ import { useState } from "react";
 import { auth, db } from "../firebaseConfig";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { name } from "@cloudinary/url-gen/actions/namedTransformation";
+//import { name } from "@cloudinary/url-gen/actions/namedTransformation";
 import { useNavigate } from "react-router-dom";
 
 const SignupPage = () => {
