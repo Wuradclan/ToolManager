@@ -13,7 +13,7 @@ export default defineConfig(async () => ({
     react(),
     tailwindcss(),
   ],
-  base: "/",
+  base: "./",
   build: {
     outDir: "dist"
   }
