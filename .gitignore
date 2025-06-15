@@ -1,1 +1,4 @@
 web/.env
+mobile/handoff-tools-app/.env
+web/node_modules
+node_modules
