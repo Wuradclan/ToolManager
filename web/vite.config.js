@@ -8,13 +8,10 @@ import tailwindcss from "@tailwindcss/vite";
 //   plugins: [react()],
 // })
 
-
-
-
-
 export default defineConfig(async () => ({
   plugins: [
     react(),
     tailwindcss(),
   ],
+  base: "/",
   }))
