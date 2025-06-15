@@ -13,8 +13,10 @@ export default defineConfig(async () => ({
     react(),
     tailwindcss(),
   ],
-  base: "./",
+  base: process.env.NODE_ENV === 'production' ? './' : '/',
+  
   build: {
     outDir: "dist"
   }
   }))
+console.log("VITE BASE PATH:", process.env.NODE_ENV);
