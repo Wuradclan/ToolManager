@@ -30,10 +30,10 @@ const handleLogin = async (e) => {
 
     const userData = userDoc.data();
 
-    // 👮 Check for admin access (optional)
-    if (userData.role !== "admin") {
-      throw new Error("You are not authorized to access the admin panel.");
-    }
+    // // 👮 Check for admin access (optional)
+    // if (userData.role !== "admin") {
+    //   throw new Error("You are not authorized to access the admin panel.");
+    // }
 
     // ✅ Redirect to admin panel
     navigate("/admin");
