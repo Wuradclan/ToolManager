@@ -6,7 +6,17 @@ import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
-export default function HomeScreen() {
+import { useEffect } from 'react';
+import { router } from 'expo-router';
+
+export default function Index() {
+  useEffect(() => {
+    router.replace('/login');
+  }, []);
+
+  return null;
+}
+export function HomeScreen() {
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}

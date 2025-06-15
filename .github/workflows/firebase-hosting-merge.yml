@@ -11,11 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cd firebase && npm install
+      - run: cd web && npm ci && npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HANDOFF_TOOLS }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TOOLS_MANAGER_36F31 }}
           channelId: live
-          projectId: handoff-tools
-          entryPoint: firebase
+          projectId: tools-manager-36f31
+          entryPoint: web
+          channelId: live
