@@ -19,3 +19,4 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TOOLS_MANAGER_36F31 }}
           projectId: tools-manager-36f31
+          entryPoint: ./web 
