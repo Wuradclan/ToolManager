@@ -12,5 +12,5 @@
     "**/*.ts",
     "**/*.tsx",
     "app/login.js"
-  ]
+, "screens/BorrowConfirmScreen.js"  ]
 }
