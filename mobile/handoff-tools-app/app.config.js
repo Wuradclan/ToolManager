@@ -5,6 +5,7 @@ export default {
     name: "Tool Manager",
     slug: "tool-manager",
     version: "1.0.0",
+    plugins: ["expo-barcode-scanner"], // deprecated
     extra: {
       firebaseApiKey: process.env.FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN,

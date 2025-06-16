@@ -1,16 +1,17 @@
 // src/services/firebaseConfig.js
+
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+
 import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import {
-  initializeAuth,
-  getReactNativePersistence,
-} from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your web app's Firebase configuration
+// ✅ Firebase configuration from app.config.js -> extra
 const firebaseConfig = {
- apiKey: Constants.expoConfig.extra.firebaseApiKey,
+  apiKey: Constants.expoConfig.extra.firebaseApiKey,
   authDomain: Constants.expoConfig.extra.firebaseAuthDomain,
   projectId: Constants.expoConfig.extra.firebaseProjectId,
   storageBucket: Constants.expoConfig.extra.firebaseStorageBucket,
@@ -18,15 +19,23 @@ const firebaseConfig = {
   appId: Constants.expoConfig.extra.firebaseAppId,
 };
 
-// Use 
+// ✅ Initialize the Firebase App once
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+// ✅ Initialize Firebase Auth (with AsyncStorage for native, fallback for web)
+let auth;
 
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
-console.log('Firebase and Auth initialized!');
+if (Platform.OS === 'web') {
+  auth = getAuth(app);
+} else {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+}
 
+// ✅ Firestore and Storage
 const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { auth, db };
+// ✅ Export for use in your app
+export { app, auth, db, storage };
