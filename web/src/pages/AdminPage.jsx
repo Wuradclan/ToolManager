@@ -22,16 +22,26 @@ export default function AdminDashboard() {
   const [qrUrl, setQrUrl] = useState(null);
   const qrRef = useRef();
   const [tools, setTools] = useState([]);
-  const [condition, setCondition] = useState("");
-  const [status, setStatus] = useState("");
-  const [location, setLocation] = useState("");
-  const [lastUsedBy, setLastUsedBy] = useState("");
-  const [gpsLocation, setGpsLocation] = useState({ lat: 0, lng: 0 });
+  const [toolCondition, setCondition] = useState("");
+  const [toolStatus, setStatus] = useState("");
+  const [toolLocation, setLocation] = useState("");
+  const [toolLastUsedBy, setLastUsedBy] = useState("");
+  const [toolGpsLocation, setGpsLocation] = useState({ lat: 0, lng: 0 });
 
   // edit 
   const [editingToolId, setEditingToolId] = useState(null);
   const [editedName, setEditedName] = useState("");
   const [editedType, setEditedType] = useState("");
+  const [editedLocation, setEditedLocation] = useState("");
+  const [editedCondition, setEditedCondition] = useState("");
+  const [editedStatus, setEditedStatus] = useState("");
+  const [editedGpsLocation, setEditedGpsLocation] = useState({ lat: "", lng: "" });
+  const [editedLastUsedBy, setEditedLastUsedBy] = useState("");
+
+  const [users, setUsers] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(""); 
+
+
 
 
   useEffect(() => {
@@ -50,6 +60,8 @@ export default function AdminDashboard() {
 
       setIsAdmin(true);
       setLoading(false);
+      setCurrentUserId(user.uid);
+      setLastUsedBy(user.uid); // default selected
         // 🔁 Fetch and listen to tools collection
       const q = query(collection(db, "tools"), orderBy("createdAt", "desc"));
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -58,6 +70,14 @@ export default function AdminDashboard() {
           ...doc.data(),
         }));
         setTools(toolsData);
+      });
+      // Fetch users for dropdown
+      const usersSnapshot = await onSnapshot(collection(db, "users"), (snapshot) => {
+        const userList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setUsers(userList);
       });
 
       // Cleanup on unmount
@@ -80,11 +100,11 @@ export default function AdminDashboard() {
    const docRef = await addDoc(collection(db, "tools"), {
       name: toolName,
       type: toolType,
-      condition,
-      status,
-      location,
-      lastUsedBy,
-      gpsLocation: new GeoPoint(gpsLocation.lat, gpsLocation.lng),
+      condition: toolCondition,
+      status : toolStatus,
+      location : toolLocation,
+      lastUsedBy: doc(db, "users", toolLastUsedBy),
+      gpsLocation: new GeoPoint(toolGpsLocation.lat, toolGpsLocation.lng),
       createdAt: new Date()
     });
     const toolId = docRef.id;
@@ -129,7 +149,7 @@ export default function AdminDashboard() {
     setCondition("");
     setStatus("");
     setLocation("");
-    setLastUsedBy("");
+    //setLastUsedBy("");
     setGpsLocation({ lat: 0, lng: 0 });
   };
 
@@ -148,19 +168,49 @@ export default function AdminDashboard() {
     setEditingToolId(tool.id);
     setEditedName(tool.name);
     setEditedType(tool.type || "");
+    setEditedCondition(tool.condition);
+    setEditedStatus(tool.status);
+    setEditedLocation(tool.location);
+    setEditedLastUsedBy(tool.lastUsedBy?.id)
+    setEditedGpsLocation({
+    lat: tool.gpsLocation?.latitude ?? "",
+    lng: tool.gpsLocation?.longitude ?? "",
+  });
   };
 
   const cancelEditing = () => {
     setEditingToolId(null);
     setEditedName("");
     setEditedType("");
+    setEditedCondition("");
+    setEditedLocation("");
+    setEditedStatus("");
+    setEditedLastUsedBy("");
+    setEditedGpsLocation({ lat: 0, lng: 0 });
   };
 
   const handleSaveEdit = async (toolId) => {
     try {
+      if (
+        !editedGpsLocation ||
+        typeof editedGpsLocation.lat !== "number" ||
+        typeof editedGpsLocation.lng !== "number" ||
+        editedGpsLocation.lat < -90 || editedGpsLocation.lat > 90 ||
+        editedGpsLocation.lng < -180 || editedGpsLocation.lng > 180
+      ) {
+        alert("Invalid GPS coordinates. Please provide valid latitude and longitude.");
+        return;
+      }
+
       await updateDoc(doc(db, "tools", toolId), {
         name: editedName,
         type: editedType,
+        condition: editedCondition,
+        status: editedStatus,
+        location: editedLocation,
+        lastUsedBy: doc(db, "users", editedLastUsedBy),
+        gpsLocation: new GeoPoint(editedGpsLocation.lat, editedGpsLocation.lng),
+        createdAt: new Date()
       });
       cancelEditing();
     } catch (error) {
@@ -200,7 +250,7 @@ export default function AdminDashboard() {
       <input
         type="text"
         className="border p-2 w-full mb-2"
-        value={condition}
+        value={toolCondition}
         onChange={(e) => setCondition(e.target.value)}
         placeholder="Condition (e.g. good)"
       />
@@ -208,7 +258,7 @@ export default function AdminDashboard() {
       <input
         type="text"
         className="border p-2 w-full mb-2"
-        value={status}
+        value={toolStatus}
         onChange={(e) => setStatus(e.target.value)}
         placeholder="Status (e.g. available)"
       />
@@ -216,31 +266,34 @@ export default function AdminDashboard() {
       <input
         type="text"
         className="border p-2 w-full mb-2"
-        value={location}
+        value={toolLocation}
         onChange={(e) => setLocation(e.target.value)}
         placeholder="Location (e.g. Workshop A)"
       />
-
-      <input
-        type="text"
+      <select
         className="border p-2 w-full mb-2"
-        value={lastUsedBy}
+        value={toolLastUsedBy}
         onChange={(e) => setLastUsedBy(e.target.value)}
-        placeholder="Last Used By (e.g. user123)"
-      />
+      >
+        {users.map((user) => (
+          <option key={user.id} value={user.id}>
+            {user.displayName || user.email || user.id}
+          </option>
+        ))}
+      </select>
 
       <div className="flex gap-2 mb-2">
         <input
           type="number"
           className="border p-2 w-1/2"
-          value={gpsLocation.lat}
+          value={toolGpsLocation.lat}
           onChange={(e) => setGpsLocation({ ...gpsLocation, lat: parseFloat(e.target.value) })}
           placeholder="Latitude"
         />
         <input
           type="number"
           className="border p-2 w-1/2"
-          value={gpsLocation.lng}
+          value={toolGpsLocation.lng}
           onChange={(e) => setGpsLocation({ ...gpsLocation, lng: parseFloat(e.target.value) })}
           placeholder="Longitude"
         />
@@ -302,6 +355,55 @@ export default function AdminDashboard() {
                         onChange={(e) => setEditedType(e.target.value)}
                         placeholder="Edited Type"
                       />
+                      <input
+                        type="text"
+                        className="border p-2 w-full mb-2"
+                        value={editedStatus}
+                        onChange={(e) => setEditedStatus(e.target.value)}
+                        placeholder="Edited Status"
+                      />
+                      <input
+                        type="text"
+                        className="border p-2 w-full mb-2"
+                        value={editedCondition}
+                        onChange={(e) => setEditedCondition(e.target.value)}
+                        placeholder="Edited Condition"
+                      />
+                      <input
+                        type="text"
+                        className="border p-2 w-full mb-2"
+                        value={editedLocation}
+                        onChange={(e) => setEditedLocation(e.target.value)}
+                        placeholder="Edited Location"
+                      />
+                      <select
+                        className="border p-2 w-full mb-2"
+                        value={editedLastUsedBy}
+                        onChange={(e) => setEditedLastUsedBy(e.target.value)}
+                      >
+                        <option value="">Select User</option>
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name || user.email || user.id}
+                          </option>
+                        ))}
+                      </select>
+
+
+                       <input
+                        type="number"
+                        className="border p-2 w-1/2"
+                        value={editedGpsLocation?.lat}
+                        onChange={(e) => setEditedGpsLocation({ ...editedGpsLocation, lat: parseFloat(e.target.value) })}
+                        placeholder="Edited Latitude"
+                      />
+                      <input
+                        type="number"
+                        className="border p-2 w-1/2"
+                        value={editedGpsLocation?.lng}
+                        onChange={(e) => setEditedGpsLocation({ ...editedGpsLocation, lng: parseFloat(e.target.value) })}
+                        placeholder="Edited Longitude"
+                      />
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleSaveEdit(tool.id)}
@@ -325,7 +427,18 @@ export default function AdminDashboard() {
                         <p>Status: {tool.status || "N/A"}</p>
                         <p>Condition: {tool.condition || "N/A"}</p>
                         <p>Location: {tool.location || "N/A"}</p>
-                        <p>Last Used By: {tool.lastUsedBy || "N/A"}</p>
+                        {(() => {
+                          const lastUsedById = tool.lastUsedBy?.id || tool.lastUsedBy;
+                          const user = users.find((u) => u.id === lastUsedById);
+                          return (
+                            <p>
+                              Last Used By:{" "}
+                              {user ? `${user.name || user.email} (${user.id})` : lastUsedById || "N/A"}
+                            </p>
+                          );
+                        })()}
+
+
                         {tool.gpsLocation && (
                           <p>
                             GPS: {tool.gpsLocation.latitude.toFixed(4)}, {tool.gpsLocation.longitude.toFixed(4)}
@@ -365,39 +478,6 @@ export default function AdminDashboard() {
 
 
             </ul>
-            {/* {editingToolId && (
-            <div className="mt-4 p-4 border rounded bg-gray-100">
-              <h3 className="font-semibold mb-2">Edit Tool</h3>
-              <input
-                type="text"
-                className="border p-2 w-full mb-2"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                placeholder="Edited Name"
-              />
-              <input
-                type="text"
-                className="border p-2 w-full mb-2"
-                value={editedType}
-                onChange={(e) => setEditedType(e.target.value)}
-                placeholder="Edited Type"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveEdit(editingToolId)}
-                  className="bg-green-500 text-white px-4 py-2 rounded"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={cancelEditing}
-                  className="bg-gray-300 text-black px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )} */}
           </div>
         )}
         
