@@ -325,7 +325,7 @@ export default function AdminDashboard() {
                         <p>Status: {tool.status || "N/A"}</p>
                         <p>Condition: {tool.condition || "N/A"}</p>
                         <p>Location: {tool.location || "N/A"}</p>
-                        <p>Last Used By: {tool.lastUsedBy || "N/A"}</p>
+                        <p>Last Used By: {tool.lastUsedBy?.id || "N/A"}</p>
                         {tool.gpsLocation && (
                           <p>
                             GPS: {tool.gpsLocation.latitude.toFixed(4)}, {tool.gpsLocation.longitude.toFixed(4)}
@@ -365,39 +365,6 @@ export default function AdminDashboard() {
 
 
             </ul>
-            {/* {editingToolId && (
-            <div className="mt-4 p-4 border rounded bg-gray-100">
-              <h3 className="font-semibold mb-2">Edit Tool</h3>
-              <input
-                type="text"
-                className="border p-2 w-full mb-2"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                placeholder="Edited Name"
-              />
-              <input
-                type="text"
-                className="border p-2 w-full mb-2"
-                value={editedType}
-                onChange={(e) => setEditedType(e.target.value)}
-                placeholder="Edited Type"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveEdit(editingToolId)}
-                  className="bg-green-500 text-white px-4 py-2 rounded"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={cancelEditing}
-                  className="bg-gray-300 text-black px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )} */}
           </div>
         )}
         
