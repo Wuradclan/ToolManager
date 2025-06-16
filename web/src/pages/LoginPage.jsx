@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth , db } from "../firebaseConfig"; // make sure you initialized Firebase here
 import { doc, getDoc } from "firebase/firestore";
+import { Link } from 'react-router-dom';
 
 
 export default function LoginPage() {
@@ -81,6 +82,12 @@ const handleLogin = async (e) => {
         >
           Sign In
         </button>
+        <Link
+          to="/signup"
+          className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded shadow"
+        >
+          Sign Up
+        </Link>
       </form>
     </div>
   );
