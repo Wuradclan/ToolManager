@@ -112,6 +112,7 @@ const SignupPage = () => {
         >
           Sign Up
         </button>
+         <button onClick={() => navigate("/login")}> Sign In </button>
       </form>
     </div>
   );
