@@ -1,4 +1,42 @@
+# OSX
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node & Web
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
 web/.env
-mobile/handoff-tools-app/.env
-web/node_modules
-node_modules
+
+# React Native / Android / iOS
+build/
+.idea
+.gradle/
+local.properties
+*.iml
+*.hprof
+.cxx/
+*.jsbundle
+
+# Editor configs
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Optional: ignore native folders if you're not using custom native code
+# ios/
+# android/

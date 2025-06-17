@@ -15,8 +15,8 @@ export default function App() {
       <Stack.Navigator initialRouteName="Login">
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="ScanToolScreen" component={ScanToolScreen} />
-        <Stack.Screen name="BorrowConfirmScreen" component={BorrowConfirmScreen} /> 
+        <Stack.Screen name="ScanTool" component={ScanToolScreen} />
+        <Stack.Screen name="BorrowConfirm" component={BorrowConfirmScreen} /> 
       </Stack.Navigator>
     </NavigationContainer>
   );
