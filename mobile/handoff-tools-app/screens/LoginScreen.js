@@ -18,7 +18,8 @@ export default function LoginScreen({ navigation }) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       Alert.alert('Login Success');
-      navigation.replace('BorrowConfirm');
+      navigation.replace('Home');
+      //navigation.navigate('BorrowConfirm');
     } catch (error) {
       console.error(error);
       let message = 'Something went wrong. Please try again.';

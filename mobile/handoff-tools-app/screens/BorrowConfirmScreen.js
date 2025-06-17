@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Button, Alert, ActivityIndicator, StyleSheet, TextInput, Platform } from 'react-native';
-import { CameraView, useCameraPermissions, CameraType } from 'expo-camera';
+import { View, Text, Button, Alert, ActivityIndicator, StyleSheet, TextInput, Platform ,KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard} from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Vibration } from 'react-native';
 
 import {
@@ -13,14 +13,15 @@ import {
   doc,
   updateDoc,
   deleteDoc,
-  Timestamp
+  Timestamp,
+  getDoc,
+  addDoc
 } from 'firebase/firestore';
-import { auth , firestore } from '../src/services/firebaseConfig';
+
+import { auth, db } from '../src/services/firebaseConfig';
 import DateTimePickerInput from '../components/DateTimePickerInput';
 
-
 export default function ConfirmBorrowScreen() {
-  const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [pendingHandoff, setPendingHandoff] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -32,88 +33,160 @@ export default function ConfirmBorrowScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [toolInfo, setToolInfo] = useState(null);
+  const [lastScannedCode, setLastScannedCode] = useState(null);
+  const [draftHandoff, setDraftHandoff] = useState(null); // local handoff to be saved later
 
 
 
-  const handleBarCodeScanned = async ({ data }) => {
-  if (scanned) return;
-  Vibration.vibrate(100);  // Vibrate for 100ms as soon as barcode is scanned
-  setScanned(true);
-  setLoading(true);
+  // useEffect(() => {
+  //   console.log('Camera permission:', permission);
+  // }, [permission]);
+  useEffect(() => {
+    if (scanned) {
+      const timer = setTimeout(() => {
+        setScanned(false);
+        setLastScannedCode(null); // allow rescanning the same code after cooldown
+      }, 3000);
 
-  try {
-    const toolId = data;
-    const currentUserRef = doc(firestore, 'users', auth.currentUser.uid);
-    const toolRef = doc(firestore, 'tools', toolId);
-
-    // Insert your tool existence check here:
-    const toolSnap = await getDoc(toolRef);
-    if (!toolSnap.exists()) {
-      Alert.alert('Tool not found', 'This tool does not exist.');
-      setScanned(false);
-      setLoading(false);
-      return;
+      return () => clearTimeout(timer);
     }
-    const toolData = toolSnap.data();
-    setToolInfo({ id: toolSnap.id, ...toolData });
+  }, [scanned]);
+  const handleBarCodeScanned = async (scanningResult) => {
+    if (scanned) return;
 
-    // Continue with your query for pending handoffs
-    const handoffsRef = collection(firestore, 'handoffs');
-    const q = query(
-      handoffsRef,
-      where('toolId', '==', toolRef),
-      where('fromUserId', '==', currentUserRef),
-      where('status', '==', 'pending'),
-      orderBy('handoffTime', 'desc'),
-      limit(1)
-    );
+    const data = scanningResult?.data;
+    setScanned(true);
 
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
-      Alert.alert('No pending handoff', 'There is no borrowing request to confirm for this tool.');
-      setLoading(false);
+    if (!data || typeof data !== 'string') {
+      Alert.alert('Scan error', 'Invalid QR code data.');
       setScanned(false);
       return;
     }
 
-    const docSnap = querySnapshot.docs[0];
-    const data = docSnap.data();
-    setPendingHandoff({ id: docSnap.id, ref: docSnap.ref, data });
-    if (data.ScheduledReturnTime) {
-      setScheduledReturnTime(data.ScheduledReturnTime.toDate());
-    }
-    if (data.notes) {
-      setNotes(data.notes);
-    }
-  } catch (error) {
-    console.error('Error checking pending handoff:', error);
-    Alert.alert('Error', 'Failed to check pending handoff.');
-    setScanned(false);
-  } finally {
-    setLoading(false);
-  }
-};
+    Vibration.vibrate(100);
+    setLoading(true);
 
-  const confirmBorrow = async () => {
+    try {
+      const toolId = data;
+      const currentUserId = auth.currentUser.uid;
+
+      // 🔍 Fetch tool info
+      const toolRef = doc(db, 'tools', toolId);
+      const toolSnap = await getDoc(toolRef);
+      if (!toolSnap.exists()) {
+        Alert.alert('Tool not found', 'This tool does not exist.');
+        setScanned(false);
+        setLoading(false);
+        return;
+      }
+      const toolData = toolSnap.data();
+      setToolInfo({ id: toolSnap.id, ...toolData });
+
+      // 🔍 Check if there's a pending handoff for this tool
+      const handoffsQuery = query(
+        collection(db, 'handoffs'),
+        where('toolId', '==', toolId),
+        where('status', '==', 'pending'),
+        limit(1)
+      );
+      const handoffSnap = await getDocs(handoffsQuery);
+
+      if (!handoffSnap.empty) {
+        const existingDoc = handoffSnap.docs[0];
+        const handoffData = existingDoc.data();
+
+        // ✅ This is the correct condition:
+        if (toolData.lastUsedBy === currentUserId && handoffData.fromUserId === null) {
+          // The current user is the one who last used the tool
+          // Show borrow confirmation form
+          setPendingHandoff({
+            id: existingDoc.id,
+            ref: existingDoc.ref,
+            data: handoffData,
+          });
+          setScheduledReturnTime(new Date());
+          setNotes('');
+          setLoading(false);
+          return;
+        } else {
+          Alert.alert(
+            'Pending handoff already exists',
+            'Someone else already initiated a request for this tool.'
+          );
+          setScanned(false);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 🔧 No pending handoff exists, so this user becomes the borrower (initiator)
+      setPendingHandoff({
+        id: null,
+        ref: null,
+        data: {
+          toolId: toolId,
+          toUserId: currentUserId,
+          fromUserId: null,
+          handoffTime: Timestamp.now(),
+          status: 'pending',
+          ScheduledReturnTime: null,
+          notes: '',
+          initiator: true,
+        },
+      });
+      setScheduledReturnTime(new Date());
+      setNotes('');
+    } catch (error) {
+      console.error('Error during scan:', error);
+      Alert.alert('Error', 'Failed to process scanned tool.');
+      setScanned(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
     if (!pendingHandoff) return;
 
     setLoading(true);
     try {
-      await updateDoc(pendingHandoff.ref, {
-        status: 'confirmed',
-        ScheduledReturnTime: Timestamp.fromDate(scheduledReturnTime),
-        notes: notes.trim()
-      });
+      const currentUserId = auth.currentUser.uid;
 
-      await updateDoc(pendingHandoff.data.toolId, {
-        lastUsedBy: pendingHandoff.data.toUserId,
-        status: 'Borrowed',
-      });
+      if (pendingHandoff?.id && pendingHandoff?.data?.status === 'pending') {
+        // ✅ Case: A borrower initiated a handoff, and now the last user confirms it
+        await updateDoc(pendingHandoff.ref, {
+          fromUserId: currentUserId,
+          status: 'confirmed',
+          ScheduledReturnTime: Timestamp.fromDate(scheduledReturnTime),
+          notes: notes.trim(),
+          confirmedTime: Timestamp.now(), // Optional metadata
+        });
 
-      Alert.alert('Success', 'Borrowing confirmed!');
+        // Update the tool document to reflect the new borrower
+        const toolRef = doc(db, 'tools', pendingHandoff.data.toolId);
+        await updateDoc(toolRef, {
+          lastUsedBy: pendingHandoff.data.toUserId,
+          status: 'Borrowed',
+        });
+
+        Alert.alert('Success', 'Borrowing confirmed!');
+      } else {
+        // ✅ Fallback (rare): if no handoff exists but we somehow got here, create one
+        await addDoc(collection(db, 'handoffs'), {
+          ...pendingHandoff.data,
+          ScheduledReturnTime: Timestamp.fromDate(scheduledReturnTime),
+          notes: notes.trim(),
+        });
+
+        Alert.alert('Success', 'New handoff created.');
+      }
+
+      // Reset state
       setPendingHandoff(null);
       setScanned(false);
       setNotes('');
+      setScheduledReturnTime(new Date());
+
     } catch (error) {
       console.error('Error confirming borrow:', error);
       Alert.alert('Error', 'Failed to confirm borrowing.');
@@ -122,7 +195,9 @@ export default function ConfirmBorrowScreen() {
     }
   };
 
-  const rejectBorrow = async () => {
+
+
+  const rejectHandOff = async () => {
     if (!pendingHandoff) return;
 
     setLoading(true);
@@ -144,34 +219,55 @@ export default function ConfirmBorrowScreen() {
     setShowDatePicker(Platform.OS === 'ios');
     setScheduledReturnTime(currentDate);
   };
-  if (!permission) return <Text>Requesting camera permission...</Text>;
-  if (!permission.granted) return <Button title="Grant Permission" onPress={requestPermission} />;
 
-  if (hasPermission === null) return <Text>Requesting camera permission...</Text>;
-  if (hasPermission === false) return <Text>No access to camera.</Text>;
+  if (!permission) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" />
+        <Text>Checking camera permission...</Text>
+      </View>
+    );
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <Text>No access to camera.</Text>
+        <Button title="Grant Camera Permission" onPress={requestPermission} />
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        
       {!scanned && (
         <>
           <Text style={styles.title}>Scan the tool QR code to confirm borrowing</Text>
           <CameraView
             ref={cameraRef}
             style={styles.camera}
-            facing={CameraType.back}
+            facing="back"
             onBarcodeScanned={handleBarCodeScanned}
+            barCodeScannerSettings={{
+              barCodeTypes: ['qr', 'pdf417', 'ean13'],
+            }}
           />
         </>
       )}
 
       {loading && <ActivityIndicator size="large" style={{ marginTop: 20 }} />}
 
-      {pendingHandoff && !loading && (
+      {(pendingHandoff || draftHandoff) && !loading && (
         <View style={styles.infoBox}>
-          <Text style={styles.subtitle}>Pending Borrow Request</Text>
-          <Text>Tool ID: {pendingHandoff.data.toolId.id}</Text>
-          <Text>From User ID: {pendingHandoff.data.fromUserId.id}</Text>
-          <Text>To User ID: {pendingHandoff.data.toUserId.id}</Text>
+          <Text style={styles.subtitle}>Borrow Request</Text>
+          <Text>Tool ID: {(pendingHandoff?.data?.toolId || draftHandoff?.toolId)}</Text>
+          <Text>To User ID: {(pendingHandoff?.data?.toUserId || draftHandoff?.toUserId)}</Text>
 
           <View style={{ marginTop: 15 }}>
             <Text style={{ fontWeight: 'bold' }}>Scheduled Return:</Text>
@@ -180,7 +276,7 @@ export default function ConfirmBorrowScreen() {
               <DateTimePickerInput
                 label="Scheduled Return"
                 value={scheduledReturnTime}
-                onChange={setScheduledReturnTime}
+                onChange={onDateChange}
               />
             )}
           </View>
@@ -197,11 +293,17 @@ export default function ConfirmBorrowScreen() {
           </View>
 
           <View style={styles.buttonRow}>
-            <Button title="Confirm Borrow" onPress={confirmBorrow} />
-            <Button title="Reject" onPress={rejectBorrow} color="red" />
+            <Button title="Confirm Handoff" onPress={handleConfirm} />
+            <Button title="Cancel" onPress={() => {
+              setDraftHandoff(null);
+              setScanned(false);
+              setToolInfo(null);
+              setNotes('');
+            }} color="red" />
           </View>
         </View>
       )}
+
 
       {scanned && !pendingHandoff && !loading && (
         <Button title="Scan Again" onPress={() => {
@@ -210,8 +312,11 @@ export default function ConfirmBorrowScreen() {
           setToolInfo(null);
         }} />
       )}
-    </View>
-  );
+    
+     </ScrollView>
+    </TouchableWithoutFeedback>
+  </KeyboardAvoidingView>
+);
 }
 
 const styles = StyleSheet.create({
@@ -219,11 +324,11 @@ const styles = StyleSheet.create({
   title: { marginBottom: 10, fontWeight: 'bold', fontSize: 16 },
   subtitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
   camera: {
+    height: 400,
     flex: 1,
     borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 20,
-    aspectRatio: 3 / 4 // keeps camera from overflowing if used in full screen
   },
   infoBox: { marginTop: 20 },
   notesInput: {
@@ -238,5 +343,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginTop: 20,
     justifyContent: 'space-around'
+  },
+  container: {
+    flexGrow: 1,
+    padding: 20,
+    backgroundColor: '#fff',
   }
 });
