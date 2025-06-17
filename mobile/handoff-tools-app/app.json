@@ -8,6 +8,7 @@
     "scheme": "handofftoolsapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "jsEngine": "hermes",
     "ios": {
       "supportsTablet": true
     },
@@ -31,6 +32,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+       
       ]
     ],
     "experiments": {
