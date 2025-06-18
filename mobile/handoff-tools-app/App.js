@@ -3,6 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { auth } from './src/services/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
+import { View, ActivityIndicator } from 'react-native';
+
+
 
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen.js';
@@ -19,16 +22,21 @@ export default function App() {
       setUser(user);
       if (initializing) setInitializing(false);
     });
-    return unsubscribe; // unsubscribe on unmount
-  }, []);
+   return unsubscribe; // Clean up subscription
+  }, [initializing]);
 
   if (initializing) {
-    // You can return a splash screen or null while checking auth state
-    return null;
+     // Show a loading spinner while auth state is being determined
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
+  
 
   return (
-    <NavigationContainer>
+     <NavigationContainer>
       <Stack.Navigator>
         {user ? (
           <>
