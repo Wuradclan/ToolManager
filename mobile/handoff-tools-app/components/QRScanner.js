@@ -1,7 +1,7 @@
 // QRScanner.js
 import React, { useState, useEffect } from 'react';
 import { Text, View, Button, Alert } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebaseConfig'; // your initialized Firestore
 
@@ -19,12 +19,7 @@ export default function QRScanner({ onToolFound }) {
   const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
-  }, []);
+  
 
   const handleBarCodeScanned = async ({ data }) => {
     setScanned(true);
@@ -45,10 +40,7 @@ export default function QRScanner({ onToolFound }) {
 
   return (
     <View style={{ flex: 1 }}>
-      <BarCodeScanner
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        style={{ flex: 1 }}
-      />
+      
       {scanned && (
         <Button title="Tap to Scan Again" onPress={() => setScanned(false)} />
       )}

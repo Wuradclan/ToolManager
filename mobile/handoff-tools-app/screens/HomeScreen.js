@@ -4,20 +4,26 @@ import { auth } from '../src/services/firebaseConfig';
 import React from 'react';
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 
+
 export default function HomeScreen({ navigation }) {
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      navigation.replace('Login'); // or navigation.navigate('Login')
+     await signOut(auth);
+    // No need for navigation here — auth state will trigger the screen change
     } catch (error) {
-      console.error('Logout Error:', error);
-      Alert.alert('Logout Failed', error.message);
+     console.error('Logout Error:', error);
+     Alert.alert('Logout Failed', error.message);
     }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to Home</Text>
+      <Button
+        title="Start Scanning"
+        onPress={() => navigation.navigate('BorrowConfirm')}
+        color="#d9534f"
+      />
       <Button title="Logout" onPress={handleLogout} color="#d9534f" />
     </View>
   );
