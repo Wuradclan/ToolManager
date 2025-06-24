@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Button, Alert, ActivityIndicator, StyleSheet, TextInput, Platform ,KeyboardAvoidingView, ScrollView, TouchableWithoutFeedback, Keyboard} from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Vibration } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import {
   collection,
@@ -42,6 +43,9 @@ export default function ConfirmBorrowScreen() {
   //   console.log('Camera permission:', permission);
   // }, [permission]);
   useEffect(() => {
+  console.log("ScheduledReturnTime:", scheduledReturnTime);
+}, [scheduledReturnTime]);
+  useEffect(() => {
     if (scanned) {
       const timer = setTimeout(() => {
         setScanned(false);
@@ -51,99 +55,100 @@ export default function ConfirmBorrowScreen() {
       return () => clearTimeout(timer);
     }
   }, [scanned]);
+  
   const handleBarCodeScanned = async (scanningResult) => {
-    if (scanned) return;
+  if (scanned) return;
 
-    const data = scanningResult?.data;
-    setScanned(true);
+  setScanned(true); // 🔒 Lock scanning early
 
-    if (!data || typeof data !== 'string') {
-      Alert.alert('Scan error', 'Invalid QR code data.');
-      setScanned(false);
+  const data = scanningResult?.data;
+
+  // 🧼 Reject invalid/malformed scans (like Expo dev URLs)
+  if (!data || typeof data !== 'string' || data.includes('://') || data.includes('?')) {
+    Alert.alert('Invalid QR Code', 'This is not a valid tool QR code.');
+    setTimeout(() => setScanned(false), 2000);
+    return;
+  }
+
+  Vibration.vibrate(100);
+  setLoading(true);
+
+  try {
+    const toolId = data;
+    const currentUserId = auth.currentUser.uid;
+
+    const toolRef = doc(db, 'tools', toolId);
+    const toolSnap = await getDoc(toolRef);
+
+    if (!toolSnap.exists()) {
+      Alert.alert('Tool not found', 'This tool does not exist in the system.');
+      setTimeout(() => setScanned(false), 2000);
       return;
     }
 
-    Vibration.vibrate(100);
-    setLoading(true);
+    const toolData = toolSnap.data();
+    setToolInfo({ id: toolSnap.id, ...toolData });
 
-    try {
-      const toolId = data;
-      const currentUserId = auth.currentUser.uid;
+    const handoffsQuery = query(
+      collection(db, 'handoffs'),
+      where('toolId', '==', toolId),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    const handoffSnap = await getDocs(handoffsQuery);
 
-      // 🔍 Fetch tool info
-      const toolRef = doc(db, 'tools', toolId);
-      const toolSnap = await getDoc(toolRef);
-      if (!toolSnap.exists()) {
-        Alert.alert('Tool not found', 'This tool does not exist.');
-        setScanned(false);
+    if (!handoffSnap.empty) {
+      const existingDoc = handoffSnap.docs[0];
+      const handoffData = existingDoc.data();
+
+      if (toolData.lastUsedBy === currentUserId && handoffData.fromUserId === null) {
+        setPendingHandoff({
+          id: existingDoc.id,
+          ref: existingDoc.ref,
+          data: handoffData,
+        });
+        setScheduledReturnTime(new Date());
+        setNotes('');
         setLoading(false);
         return;
+      } else {
+        // ✅ Show alert only once per scan
+        Alert.alert(
+          'Pending Request Exists',
+          'Another user has already initiated a borrowing request for this tool.'
+        );
+        setTimeout(() => setScanned(false), 2000);
+        return;
       }
-      const toolData = toolSnap.data();
-      setToolInfo({ id: toolSnap.id, ...toolData });
-
-      // 🔍 Check if there's a pending handoff for this tool
-      const handoffsQuery = query(
-        collection(db, 'handoffs'),
-        where('toolId', '==', toolId),
-        where('status', '==', 'pending'),
-        limit(1)
-      );
-      const handoffSnap = await getDocs(handoffsQuery);
-
-      if (!handoffSnap.empty) {
-        const existingDoc = handoffSnap.docs[0];
-        const handoffData = existingDoc.data();
-
-        // ✅ This is the correct condition:
-        if (toolData.lastUsedBy === currentUserId && handoffData.fromUserId === null) {
-          // The current user is the one who last used the tool
-          // Show borrow confirmation form
-          setPendingHandoff({
-            id: existingDoc.id,
-            ref: existingDoc.ref,
-            data: handoffData,
-          });
-          setScheduledReturnTime(new Date());
-          setNotes('');
-          setLoading(false);
-          return;
-        } else {
-          Alert.alert(
-            'Pending handoff already exists',
-            'Someone else already initiated a request for this tool.'
-          );
-          setScanned(false);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // 🔧 No pending handoff exists, so this user becomes the borrower (initiator)
-      setPendingHandoff({
-        id: null,
-        ref: null,
-        data: {
-          toolId: toolId,
-          toUserId: currentUserId,
-          fromUserId: null,
-          handoffTime: Timestamp.now(),
-          status: 'pending',
-          ScheduledReturnTime: null,
-          notes: '',
-          initiator: true,
-        },
-      });
-      setScheduledReturnTime(new Date());
-      setNotes('');
-    } catch (error) {
-      console.error('Error during scan:', error);
-      Alert.alert('Error', 'Failed to process scanned tool.');
-      setScanned(false);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // No handoff found, this user initiates one
+    setPendingHandoff({
+      id: null,
+      ref: null,
+      data: {
+        toolId,
+        toUserId: currentUserId,
+        fromUserId: null,
+        handoffTime: Timestamp.now(),
+        status: 'pending',
+        ScheduledReturnTime: null,
+        notes: '',
+        initiator: true,
+      },
+    });
+    setScheduledReturnTime(new Date());
+    setNotes('');
+
+  } catch (error) {
+    console.error('Error during scan:', error);
+    Alert.alert('Scan Error', 'Something went wrong while processing this QR code.');
+    setTimeout(() => setScanned(false), 2000);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleConfirm = async () => {
     if (!pendingHandoff) return;
@@ -215,9 +220,18 @@ export default function ConfirmBorrowScreen() {
   };
 
   const onDateChange = (event, selectedDate) => {
-    const currentDate = selectedDate || scheduledReturnTime;
-    setShowDatePicker(Platform.OS === 'ios');
-    setScheduledReturnTime(currentDate);
+    if (event.type === 'dismissed') {
+      setShowDatePicker(false); // only close picker if dismissed
+      return;
+    }
+
+    if (selectedDate) {
+      setScheduledReturnTime(selectedDate); // ✅ update state
+    }
+
+    if (Platform.OS !== 'ios') {
+      setShowDatePicker(false); // ✅ hide picker only on Android
+    }
   };
 
   if (!permission) {
@@ -246,7 +260,7 @@ export default function ConfirmBorrowScreen() {
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         
-      {!scanned && (
+      {!pendingHandoff && !draftHandoff && !loading && (
         <>
           <Text style={styles.title}>Scan the tool QR code to confirm borrowing</Text>
           <CameraView
@@ -272,10 +286,12 @@ export default function ConfirmBorrowScreen() {
           <View style={{ marginTop: 15 }}>
             <Text style={{ fontWeight: 'bold' }}>Scheduled Return:</Text>
             <Button title={scheduledReturnTime.toLocaleString()} onPress={() => setShowDatePicker(true)} />
-            {showDatePicker && (
-              <DateTimePickerInput
-                label="Scheduled Return"
+           {showDatePicker && (
+              <DateTimePicker
                 value={scheduledReturnTime}
+                mode="datetime"
+                is24Hour={true}
+                display="default"
                 onChange={onDateChange}
               />
             )}
@@ -305,11 +321,13 @@ export default function ConfirmBorrowScreen() {
       )}
 
 
-      {scanned && !pendingHandoff && !loading && (
+      {scanned && !pendingHandoff && !draftHandoff && !loading && (
         <Button title="Scan Again" onPress={() => {
           setScanned(false);
           setPendingHandoff(null);
+          setDraftHandoff(null);
           setToolInfo(null);
+          setNotes('');
         }} />
       )}
     
