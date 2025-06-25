@@ -22,6 +22,7 @@ import {
 import { auth, db } from '../src/services/firebaseConfig';
 
 export default function ConfirmBorrowScreen() {
+  const [indexErrorShown, setIndexErrorShown] = useState(false); // add at the top of your component
   const [scanned, setScanned] = useState(false);
   const [pendingHandoff, setPendingHandoff] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,8 @@ export default function ConfirmBorrowScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [toolInfo, setToolInfo] = useState(null);
+  const [scanError, setScanError] = useState(null);
+  
 
   useEffect(() => {
     if (scanned) {
@@ -42,42 +45,50 @@ export default function ConfirmBorrowScreen() {
       return () => clearTimeout(timer);
     }
   }, [scanned]);
+  useEffect(() => {
+    if (scanError) {
+      Alert.alert(scanError.title, scanError.message);
+      setScanError(null);
+    }
+  }, [scanError]);
+
 
   const handleBarCodeScanned = async (scanningResult) => {
-    if (scanned) return;
+  if (scanned) return;
 
-    setScanned(true);
+  setScanned(true);
 
-    const data = scanningResult?.data;
+  const data = scanningResult?.data;
 
-    if (!data || typeof data !== 'string' || data.includes('://') || data.includes('?')) {
-      Alert.alert('Invalid QR Code', 'This is not a valid tool QR code.');
+  if (!data || typeof data !== 'string' || data.includes('://') || data.includes('?')) {
+    setScanError({ title: 'Invalid QR Code', message: 'This is not a valid tool QR code.' });
+    setTimeout(() => setScanned(false), 2000);
+    return;
+  }
+
+  Vibration.vibrate(100);
+  setLoading(true);
+
+  try {
+    const toolId = data;
+    const currentUserId = auth.currentUser.uid;
+
+    const toolRef = doc(db, 'tools', toolId);
+    const toolSnap = await getDoc(toolRef);
+
+    if (!toolSnap.exists()) {
+      setScanError({ title: 'Tool not found', message: 'This tool does not exist in the system.' });
       setTimeout(() => setScanned(false), 2000);
       return;
     }
 
-    Vibration.vibrate(100);
-    setLoading(true);
+    const toolData = toolSnap.data();
+    setToolInfo({ id: toolSnap.id, ...toolData });
 
+    const handoffsRef = collection(db, 'handoffs');
+
+    let fromUserId = null;
     try {
-      const toolId = data;
-      const currentUserId = auth.currentUser.uid;
-
-      // Fetch tool info
-      const toolRef = doc(db, 'tools', toolId);
-      const toolSnap = await getDoc(toolRef);
-
-      if (!toolSnap.exists()) {
-        Alert.alert('Tool not found', 'This tool does not exist in the system.');
-        setTimeout(() => setScanned(false), 2000);
-        return;
-      }
-
-      const toolData = toolSnap.data();
-      setToolInfo({ id: toolSnap.id, ...toolData });
-
-      // Step 1: Get last confirmed handoff's toUserId (current holder)
-      const handoffsRef = collection(db, 'handoffs');
       const confirmedHandoffsQuery = query(
         handoffsRef,
         where('toolId', '==', toolId),
@@ -86,90 +97,128 @@ export default function ConfirmBorrowScreen() {
         limit(1)
       );
       const confirmedSnap = await getDocs(confirmedHandoffsQuery);
-
-      let fromUserId = null;
-
       if (!confirmedSnap.empty) {
         const lastConfirmed = confirmedSnap.docs[0].data();
         fromUserId = lastConfirmed.toUserId || null;
       }
-
-      // Step 2: Fallback to tool's lastUsedBy if no confirmed handoff found
-      if (!fromUserId) {
-        fromUserId = toolData.lastUsedBy || null;
-      }
-
-      if (!fromUserId) {
-        Alert.alert('Tool Unassigned', 'This tool currently has no assigned user. Please contact admin.');
-        setTimeout(() => setScanned(false), 2000);
+    } catch (queryError) {
+      if (
+        queryError.code === 'failed-precondition' &&
+        queryError.message.includes('requires an index')
+      ) {
+        if (!indexErrorShown) {
+          setIndexErrorShown(true);
+          Alert.alert(
+            'Missing Firestore Index',
+            'An index is required to fetch tool data. Please create it in the Firebase Console.'
+          );
+        }
         return;
+      } else {
+        throw queryError;
       }
+    }
 
-      if (fromUserId === currentUserId) {
-        Alert.alert('You already have this tool', 'You are already the last user of this tool.');
-        setTimeout(() => setScanned(false), 2000);
-        return;
-      }
+    if (!fromUserId) {
+      fromUserId = toolData.lastUsedBy || null;
+    }
 
-      // Check if pending handoff for this tool and borrower already exists
-      const existingPendingQuery = query(
-        handoffsRef,
-        where('toolId', '==', toolId),
-        where('toUserId', '==', currentUserId),
-        where('status', '==', 'pending'),
-        limit(1)
-      );
-      const existingPendingSnap = await getDocs(existingPendingQuery);
+    if (!fromUserId) {
+      setScanError({ title: 'Tool Unassigned', message: 'This tool currently has no assigned user. Please contact admin.' });
+      setTimeout(() => setScanned(false), 2000);
+      return;
+    }
 
-      if (!existingPendingSnap.empty) {
-        Alert.alert('Pending Request Exists', 'You have already requested to borrow this tool and it is pending confirmation.');
-        setTimeout(() => setScanned(false), 2000);
-        return;
-      }
+        // Check if there is a pending request for this tool that this user should confirm
+    const confirmableQuery = query(
+      handoffsRef,
+      where('toolId', '==', toolId),
+      where('fromUserId', '==', currentUserId),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    const confirmableSnap = await getDocs(confirmableQuery);
 
-      // Check if tool has any pending request by others
-      const anyPendingQuery = query(
-        handoffsRef,
-        where('toolId', '==', toolId),
-        where('status', '==', 'pending'),
-        limit(1)
-      );
-      const anyPendingSnap = await getDocs(anyPendingQuery);
+    if (!confirmableSnap.empty) {
+      const docRef = confirmableSnap.docs[0].ref;
+      const handoffData = confirmableSnap.docs[0].data();
 
-      if (!anyPendingSnap.empty) {
-        Alert.alert('Tool Request Exists', 'Another user has already initiated a borrowing request for this tool.');
-        setTimeout(() => setScanned(false), 2000);
-        return;
-      }
-
-      // Create new pending handoff request
       setPendingHandoff({
-        id: null,
-        ref: null,
-        data: {
-          toolId,
-          fromUserId,      // Current holder who must confirm
-          toUserId: currentUserId, // Requester
-          handoffTime: Timestamp.now(),
-          status: 'pending',
-          ScheduledReturnTime: null,
-          notes: '',
-          initiator: true,
-        },
+        id: confirmableSnap.docs[0].id,
+        ref: docRef,
+        data: handoffData,
       });
 
       setScheduledReturnTime(new Date());
       setNotes('');
-
-    } catch (error) {
-      console.error('Error during scan:', error);
-      Alert.alert('Scan Error', 'Something went wrong while processing this QR code.');
-      setTimeout(() => setScanned(false), 2000);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
 
+    // If no pending handoff to confirm, and user is already the last holder, show message
+    if (fromUserId === currentUserId) {
+      setScanError({ title: 'You already have this tool', message: 'You are already the last user of this tool.' });
+      setTimeout(() => setScanned(false), 2000);
+      return;
+    }
+
+
+    const existingPendingQuery = query(
+      handoffsRef,
+      where('toolId', '==', toolId),
+      where('toUserId', '==', currentUserId),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    const existingPendingSnap = await getDocs(existingPendingQuery);
+
+    if (!existingPendingSnap.empty) {
+      setScanError({ title: 'Pending Request Exists', message: 'You have already requested to borrow this tool and it is pending confirmation.' });
+      setTimeout(() => setScanned(false), 2000);
+      return;
+    }
+
+    const anyPendingQuery = query(
+      handoffsRef,
+      where('toolId', '==', toolId),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    const anyPendingSnap = await getDocs(anyPendingQuery);
+
+    if (!anyPendingSnap.empty) {
+      setScanError({ title: 'Tool Request Exists', message: 'Another user has already initiated a borrowing request for this tool.' });
+      setTimeout(() => setScanned(false), 2000);
+      return;
+    }
+
+    setPendingHandoff({
+      id: null,
+      ref: null,
+      data: {
+        toolId,
+        fromUserId,
+        toUserId: currentUserId,
+        handoffTime: Timestamp.now(),
+        status: 'pending',
+        ScheduledReturnTime: null,
+        notes: '',
+        initiator: true,
+      },
+    });
+
+    setScheduledReturnTime(new Date());
+    setNotes('');
+  } catch (error) {
+    console.error('Error during scan:', error);
+    setScanError({ title: 'Scan Error', message: 'Something went wrong while processing this QR code.' });
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+///////////////////
   const handleConfirm = async () => {
     if (!pendingHandoff) return;
 
@@ -331,6 +380,7 @@ export default function ConfirmBorrowScreen() {
                   setScanned(false);
                   setToolInfo(null);
                   setNotes('');
+                  setIndexErrorShown(false); // reset flag
                 }} color="red" />
               </View>
             </View>
@@ -342,6 +392,7 @@ export default function ConfirmBorrowScreen() {
               setPendingHandoff(null);
               setToolInfo(null);
               setNotes('');
+              setIndexErrorShown(false); // reset flag
             }} />
           )}
 

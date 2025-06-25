@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../src/services/firebaseConfig';
 import { View, Text, Button, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   collection,
   query,
@@ -18,6 +19,16 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [userTools, setUserTools] = useState([]);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
+  const [pendingHandoffToolIds, setPendingHandoffToolIds] = useState([]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const currentUser = auth.currentUser;
+      if (currentUser?.uid) {
+        fetchPendingHandoffs(currentUser.uid);
+      }
+    }, [])
+  );
 
   // Fetch tools last used by current user
   const fetchUserTools = async (uid) => {
@@ -53,6 +64,7 @@ export default function HomeScreen({ navigation }) {
 
           let toolName = '';
           let toUserName = '';
+          
 
           // Fetch tool name
           try {
@@ -75,6 +87,7 @@ export default function HomeScreen({ navigation }) {
           } catch {
             // Ignore errors here
           }
+          setPendingHandoffToolIds(handoffs.map(h => h.toolId));
 
           return {
             id: handoffId,
